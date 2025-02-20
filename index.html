@@ -1,0 +1,370 @@
+
+<!doctype html>
+<html lang='en'>
+    <head>
+        <meta charset='utf-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1'>    
+        <title>GT Metrics Dashboard</title>    
+        <link href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css' rel='stylesheet' integrity='sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH' crossorigin='anonymous'>
+
+
+        <script src='https://cdn.jsdelivr.net/npm/d3@7'></script>
+        <script src='https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6'></script>
+
+        <style>
+            * {
+                font-family: speedee;
+                color: #2D2D2D;
+            }
+
+            header h1 {
+                background: #2D2D2D;
+                font-size: 24px;
+                padding: 30px;   
+            }
+
+            header .h1_crop {
+                height: 65px;
+                overflow: hidden;
+            }
+
+            header .h1_crop img {
+                height: 80px;
+            }
+
+            h2 {
+                font-weight: bold;
+                font-size: 28px;
+            }
+
+            h3 {
+                font-weight: bold;
+                font-size: 20px;
+                border-bottom: 3px solid lightgray;
+                padding: 2px;
+            }
+
+            .objective {
+                margin-top: 40px;
+                margin-bottom: 40px;
+                padding: 0px;
+            }
+
+            td {
+                padding: 0px;
+            }
+
+            .status {
+                font-weight: bold;
+                font-size: 20px;
+            }
+
+            .delayed {
+                color: red; 
+            }
+
+            .bg-body {
+                margin-top: 40px;
+            }
+
+            .alert-custom-on-track, .alert-custom-delayed, .alert-custom-at-risk, .alert-custom-complete {
+                border-color: white;
+                text-align: center;
+            }
+
+            .alert-custom-on-track {
+                background-color: #8ED17F;
+                /*border-color: #2E6222;*/
+            }
+
+            .alert-custom-delayed {
+                background-color: #FF4D64;
+                /*border-color: #800010;*/
+            }
+
+            .alert-custom-at-risk {
+                background-color: #FFD88B;
+                /*border-color: #BE7F00;*/
+            }
+
+            .alert-custom-complete {
+                background-color: #F7F7F7;
+                /*border-color: #2D2D2D;*/
+            }
+
+        </style>
+
+        <script type='module'>
+            
+            const reporting_month = new Date('2025-06-01T00:00:00.000Z');
+
+            // Load metric metadata
+            
+            const metrics_metadata_flat = await d3.csv('https://docs.google.com/spreadsheets/d/1LvislqxMkj2IzcrStUQUrDVTTEs73MRQUXNFd2GP6Wc/gviz/tq?tqx=out:csv', d3.autoType);
+            var metric_metadata_nested = d3.group(metrics_metadata_flat, d => d.Platform, d => d['Objective Number']);    
+            console.log(metrics_metadata_flat);     
+            console.log(metric_metadata_nested);
+
+            const metrics_values_flat = await d3.csv('https://docs.google.com/spreadsheets/d/1IvMdOZOKfAPIuWaKZHkWcrQgHFWg1etukACbuQMGXl4/gviz/tq?tqx=out:csv', d3.autoType);
+            var metric_values_nested = d3.group(metrics_values_flat, d => d['Key Result']);
+            //console.log(metrics_values_flat);
+            //console.log(metric_values_nested);  
+                        
+            d3.map(metric_metadata_nested, function(d) {                    //platform
+                d3.map(d[1], function(d) {                                  //objective   
+                    d3.map(d[1], function(d) {                              //key result
+                        var k = d['Key Result Number'];
+                        d['Metric Values'] = metric_values_nested.get(k);
+                    });
+                });
+            });
+
+            console.log(metric_metadata_nested);
+
+            d3.select('#metrics')
+                .selectAll('div')
+                .data(metric_metadata_nested)
+                .enter()
+                .append('div')
+                .attr('class', 'container platform')
+                .attr('id', d => d[0])
+                .append('h2')
+                .text(d => d[0]);
+
+            d3.selectAll('.platform')
+                .append('div')
+                .attr('class', 'objectives mim-vw-100')
+                .selectAll('div')
+                //.data(function(d) {console.log(d); return d[1];})
+                .data(d => d[1])
+                .enter()
+                .append('div')
+                .attr('class', 'container objective')
+                .attr('id', d => d[0])
+                .append('h3')
+                .text(d => d[0] + ' : ' + d[1][0]['Objective']) //get the first key result then get the objective name
+
+            var table = d3.selectAll('.objective')
+                .append('table')
+                .attr('class', 'table key_results')
+            
+            var trow = table.append('tbody')
+                .selectAll('tr')
+                //.data(function(d) {console.log(d); return d;})
+                .data(d => d[1])
+                .enter()
+                .append('tr')
+                .attr('class', 'key_result')
+                .attr('id', d => d['Key Result Number']);
+
+            trow.append('td')
+                .attr('width', '40%')
+                .text(d => d['Key Result Number'] + ' : ' + d['Key Result']);
+            
+            trow.append('td')
+                .attr('width', '10%')
+                .text(d => d['Owner']);
+
+            trow.append('td')
+                .attr('width', '10%')
+                .attr('class', 'status') 
+                .append(function(d) {   
+                    var div = document.createElement('div');
+
+                    if (typeof d['Metric Values'] === 'undefined' ) {
+                        return div;
+                    }
+
+                    var data_this_month = d['Metric Values'].filter( e => e.Month.getTime() < reporting_month.getTime()).at(-1);
+
+                    d3.select(div)
+                        .attr('class','col-sm')
+                        .append('div')
+                        .attr('class', function() {
+                            if (data_this_month.Status == 'Delayed') {
+                                return 'm-0 alert alert-custom-delayed rounded-0'
+                            } else if (data_this_month.Status == 'On track') {
+                                return 'm-0 alert alert-custom-on-track rounded-0'
+                            } else if (data_this_month.Status == 'At risk') {
+                                return 'm-0 alert alert-custom-at-risk rounded-0'
+                            } else if (data_this_month.Status == 'Complete') {
+                                return 'm-0 alert alert-custom-complete rounded-0'
+                            } else if (data_this_month.Status == 'De-prioritized') {
+                                return 'm-0 alert alert-dark rounded-0'
+                            }
+                        })
+                        .append('strong')
+                        .text(data_this_month.Status);
+
+                    return div;
+                });
+
+            trow.append('td')
+                .attr('width', '10%')
+                .attr('class', 'values')
+                .append(function(d) {
+                    var div = document.createElement('div');
+
+                    if (typeof d['Metric Values'] === 'undefined' ) {
+                        return div;
+                    }
+                    
+                    var data_this_month = d['Metric Values'].filter( e => e.Month.getTime() < reporting_month.getTime()).at(-1);
+            
+                    var div_values = d3.select(div)
+                        .attr('class','col-sm')
+                        .append('small')
+                        .attr('class', 'text-muted')
+
+                    
+                        div_values.append('p').append('b').text(data_this_month.Month.toLocaleDateString('en-US', {month: 'long', year: 'numeric'}))
+
+                    if (d['Visualisation Category'] == 'Status') {
+                        if (data_this_month.Target) {
+                            div_values.append('p').text('Target : ' + data_this_month.Target.toLocaleDateString('en-US'))
+                        }
+                        if (data_this_month.Plan) {
+                            div_values.append('p').text('Plan : ' + data_this_month.Plan.toLocaleDateString('en-US'))
+                        }
+                        if (data_this_month.Actual) {
+                            div_values.append('p').text('Actual : ' + data_this_month.Actual.toLocaleDateString('en-US'))
+                        }
+                    } else if (d['Visualisation Category'] == 'Metric') {
+                        if (data_this_month.Target) {
+                            div_values.append('p').text('Target ' + data_this_month.Target).attr('style', 'color: grey')
+                        }
+                        if (data_this_month.Plan) {
+                            div_values.append('p').text('Plan ' + data_this_month.Plan)
+                        }
+                        if (data_this_month.Actual) {
+                            div_values.append('p').text('Actual ' + data_this_month.Actual).attr('style', 'color: #FFBC0D')
+                        }
+                    }   
+                    div_values.selectAll('p').attr('class', 'my-0');
+
+                    return div;
+                });
+
+            trow.append('td')
+                .attr('width', '20%')
+                .attr('class', 'trend p-8 m-0')
+                .append(function(d) {
+                    var div = document.createElement('div');
+
+                    if (typeof d['Metric Values'] === 'undefined' ) {
+                        return div;
+                    }
+
+                    //console.log(data[4].Month + ' ' + reporting_month);
+                    //console.log(data[4].Month.getTime() + ' ' + reporting_month.getTime());
+                    var data_this_month = d['Metric Values'].filter( e => e.Month.getTime() < reporting_month.getTime()).at(-1);
+
+                    var div = document.createElement('div');
+                    
+                    var div_plot = d3.select(div).append('div')
+                    if (d['Visualisation Category'] == 'Status') {                        
+                        div_plot
+                            .append(function(p) { 
+                                var marks = [
+                                    Plot.barX(d['Metric Values'], Plot.stackX({y1: -1, y2: 1, fillOpacity: 1.0, inset: 0.5, fill: 'Status'})),
+                                    Plot.textX(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'], Plot.stackX({inset: 0.5, y1: -1, y2: 1, fontSize:25, fontFamily:'Speedee'})),
+                                    Plot.axisX({ticks: []}),
+                                    Plot.axisY({ticks: []})
+                                ]
+                                marks.push((data_this_month.Target) ? Plot.ruleX([data_this_month.Target.getMonth()+1,], {y: -1.3, stroke: 'black', strokeWidth: 2, markerStart: 'dot', markerEnd: 'dot'}) : null);
+                                marks.push((data_this_month.Plan) ? Plot.ruleX([data_this_month.Plan.getMonth()+1,], {y: -1.3, stroke: 'black', strokeWidth: 2, markerStart: 'dot', markerEnd: 'dot'}) : null);
+                                marks.push((data_this_month.Target) ? Plot.tip(['Target'], {x: data_this_month.Target.getMonth()+1, y:-1, anchor:'bottom', fontSize:20, fontFamily:'Speedee'}) : null);
+                                marks.push((data_this_month.Plan) ? Plot.tip(['Plan'], {x: data_this_month.Plan.getMonth()+1, y:-1, anchor:'top', fontSize:20, fontFamily:'Speedee'}) : null);
+                                     
+
+                                return Plot.plot({
+                                    color: {
+                                        type : 'categorical',
+                                        domain : ['On track', 'Delayed', 'Complete', 'De-prioritized', 'At risk'],
+                                        //range : ['#4DA43A', '#D6001C', '#2D2D2D', '#2D2D2D', '#BE7F00'],
+                                        range : ['#8ED17F', '#FF4D64', '#F7F7F7', '#2D2D2D', '#FFD88B'],
+                                        //legend: true
+                                    },
+                                    marks: marks,
+                                    style : {
+                                        fontSize: 14,
+                                        fontFamily: 'Speedee'
+                                    },
+                                    height: 160,
+                                    marginLeft: 0,
+                                    marginTop: 0,
+                                    marginBottom: 0,
+                                    marginRight: 0
+                                })
+                            });
+                    } else if (d['Visualisation Category'] == 'Metric') {
+                        div_plot
+                            .append(function (p) {
+                                var marks = []
+
+                                if (data_this_month.Target) {
+                                    marks.push(
+                                        Plot.lineY(d['Metric Values'], {x: 'Month', y: 'Target', stroke: 'black', strokeWidth: 3, opacity: 0.5, marker: 'circle'})
+                                    )
+                                }
+                                if (data_this_month.Plan) {
+                                    marks.push(
+                                        Plot.lineY(d['Metric Values'], {x: 'Month', y: 'Plan', stroke: 'black', strokeWidth: 3,  marker: 'circle'})
+                                    )
+                                }
+                                if (data_this_month.Actual) {
+                                    marks.push(
+                                        Plot.lineY(d['Metric Values'], {x: 'Month', y: 'Actual', stroke: '#FFBC0D', strokeWidth: 3,  marker: 'circle'}),
+                                        //Plot.text(d['Metric Values'], {
+                                        //    //filter: (d) => d.Month.getTime() == (new Date('2025-06-01T00:00:00.000Z')).getTime(),
+                                        //    x: 'Month', y: 'Actual',
+                                        //    text: (d) => d.Actual,
+                                        //    dy: -0.5
+                                        //})
+                                    )
+                                }
+
+                                return Plot.plot({
+                                    marks: marks,
+                                    style : {
+                                        fontSize: 30,
+                                        fontFamily: 'Speedee'
+                                    },
+                                    height: 160,
+                                    marginLeft: 0,
+                                    marginTop: 10,
+                                    marginBottom: 10,
+                                    marginRight: 0,
+                                    x: {axis: null},
+                                    y: {axis: null}
+                                })
+                            })
+                    } else {
+                        div_plot
+                            .text('No plot type found')
+                    }               
+                    return div;
+                });
+
+        </script>
+    </head>
+
+    <body>
+        <script src='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js' integrity='sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz' crossorigin='anonymous'></script>
+    
+        <header>
+            <h1 class='rounded-0'>
+                <div class='hstack gap-3'>
+                    <div class='h1_crop'><img src='White Logo.png'/></div>
+                    <div class='vr text-white p-0'></div>        
+                    <div class='text-white'>Global Technology Metrics</div>            
+                </div>
+            </h1>
+        </header>
+
+        <div class='container-fluid bg-body'>
+            <div id='metrics' class='container-fluid'></div>
+        </div>
+
+    </body>
+</html>
